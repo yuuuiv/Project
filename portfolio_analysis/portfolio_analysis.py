@@ -3,8 +3,8 @@ import numpy as np
 
 
 # read predicted values (output.csv from the other script)
-pred_path = "Your predicted values path"
-pred = pd.read_csv(pred_path, parse_dates=["date"])
+work_dir = "data"
+pred = pd.read_csv(work_dir, "output.csv", parse_dates=["date"])
 # pred.columns = map(str.lower, pred.columns)
 
 # select model (ridge as an example)

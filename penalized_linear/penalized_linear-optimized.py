@@ -151,7 +151,7 @@ if __name__ == "__main__":
         counter += 1
 
     # output the predicted value to csv
-    out_path = os.path.join(work_dir, "output.csv")
+    out_path = os.path.join(work_dir, "output-optimized.csv")
     print(out_path)
     pred_out.to_csv(out_path, index=False)
 
