@@ -83,8 +83,8 @@ if __name__ == "__main__":
         # 跳过 RandomForest 训练，直接使用已知最佳参数
         print("使用已知的最佳 RandomForest 模型参数...")
         best_rf_model = RandomForestRegressor(
-            n_estimators=100,
-            max_depth=10,
+            n_estimators=50,
+            max_depth=50,
             min_samples_split=5,
             random_state=42
         )
