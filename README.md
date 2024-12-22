@@ -85,3 +85,106 @@ IC是预测值与实际收益的横截面相关系数：
 ### 6. **改进思路**
 - **非线性模型**：在`penalized_linear.py`中引入如XGBoost、Random Forest等非线性模型。
 - **多因子组合**：对不同因子赋权，利用优化算法选择最优因子权重。
+
+
+## 针对数据处理部分的优化
+
+---
+
+### **数据处理优化方向**
+#### 1. **减少内存占用**
+- **数据类型优化**：
+  - 使用 `pandas` 的 `astype` 方法将数据类型压缩为最小必要类型。例如，将浮点数降级为 `float32`，将整型降级为 `int32`。
+  ```python
+  for col in df.select_dtypes(include=['float']).columns:
+      df[col] = df[col].astype('float32')
+  for col in df.select_dtypes(include=['int']).columns:
+      df[col] = df[col].astype('int32')
+  ```
+
+- **按需加载**：
+  - 使用 `chunksize` 按块加载数据，仅处理必要的字段或行。
+  ```python
+  chunks = pd.read_csv("stock_sample.csv", chunksize=100000)
+  for chunk in chunks:
+      process_chunk(chunk)  # 自定义数据处理函数
+  ```
+
+---
+
+#### 2. **分布式处理**
+- **并行化**：
+  - 使用 `joblib` 或 `concurrent.futures` 并行处理每月数据。例如，按 `date` 分组后，将每组数据并行处理。
+  ```python
+  from joblib import Parallel, delayed
+
+  def process_group(group):
+      # 数据处理逻辑
+      return processed_group
+
+  results = Parallel(n_jobs=-1)(delayed(process_group)(group) for _, group in df.groupby("date"))
+  processed_data = pd.concat(results)
+  ```
+
+- **分布式框架**：
+  - 使用 `Dask` 或 `PySpark` 处理超大数据集。
+  ```python
+  import dask.dataframe as dd
+  ddf = dd.read_csv("stock_sample.csv")
+  ddf = ddf.groupby("date").apply(process_group, meta={...})
+  ddf.compute()
+  ```
+
+---
+
+#### 3. **特征工程优化**
+- **矢量化计算**：
+  - 避免 `for` 循环，尽量使用 `numpy` 或 `pandas` 的矢量化操作。例如：
+  ```python
+  # 现有代码逐列 rank，改为矢量化
+  ranks = df[stock_vars].rank(axis=1, method='dense') - 1
+  max_vals = ranks.max(axis=1)
+  df[stock_vars] = (ranks.T / max_vals).T * 2 - 1
+  ```
+
+- **缺失值处理**：
+  - 针对缺失值填充，先计算所有列的中位数，然后用矩阵操作一次性填充。
+  ```python
+  medians = df[stock_vars].median(skipna=True)
+  df[stock_vars] = df[stock_vars].fillna(medians)
+  ```
+
+---
+
+#### 4. **按需裁剪数据**
+- **时间窗口过滤**：
+  - 按时间分段仅加载需要的年份范围。
+  ```python
+  filtered_data = df[(df["date"] >= "2015-01-01") & (df["date"] <= "2023-12-31")]
+  ```
+
+- **特征选择**：
+  - 使用特征重要性筛选最相关的变量。例如，通过相关性过滤冗余特征：
+  ```python
+  corr_matrix = df[stock_vars].corr().abs()
+  upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+  to_drop = [column for column in upper.columns if any(upper[column] > 0.95)]
+  df = df.drop(columns=to_drop)
+  ```
+
+---
+
+### **优化后的处理流程建议**
+1. **预加载设置**：
+   - 检查数据类型，优化内存占用；
+   - 使用 `chunksize` 分块加载，减少内存压力。
+2. **矢量化预处理**：
+   - 使用矢量化处理变量的归一化和缺失值填充；
+   - 统一对时间序列分段处理。
+3. **分布式加速**：
+   - 并行化分组处理，利用多核计算提升速度；
+   - 数据规模过大时，使用 `Dask` 处理。
+4. **输出存储优化**：
+   - 保存中间处理结果为高效格式（如 `Parquet`）以减少后续读取时间。
+
+---
