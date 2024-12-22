@@ -4,7 +4,7 @@ import numpy as np
 
 # read predicted values (output.csv from the other script)
 work_dir = "data"
-pred = pd.read_csv(work_dir, "output.csv", parse_dates=["date"])
+pred = pd.read_csv("data/output.csv", parse_dates=["date"])
 # pred.columns = map(str.lower, pred.columns)
 
 # select model (ridge as an example)
@@ -24,8 +24,10 @@ pred = pred.sort_values(
     ["year", "month", "rank", "permno"]
 )  # sort stocks based on the rank
 monthly_port = pred.groupby(["year", "month", "rank"]).apply(
-    lambda df: pd.Series(np.average(df["stock_exret"], axis=0))
-)  # calculate the realized return for each portfolio using realized stock returns, assume equal-weighted portfolios
+    lambda df: pd.Series(
+        np.average(df["stock_exret"].to_numpy(), axis=0)
+    )
+) # calculate the realized return for each portfolio using realized stock returns, assume equal-weighted portfolios
 monthly_port = monthly_port.unstack().dropna().reset_index()  # reshape the data
 monthly_port.columns = ["year", "month"] + [
     "port_" + str(x) for x in range(1, 11)
