@@ -84,7 +84,7 @@ if __name__ == "__main__":
         print("使用已知的最佳 RandomForest 模型参数...")
         best_rf_model = RandomForestRegressor(
             n_estimators=50,
-            max_depth=50,
+            max_depth=5,
             min_samples_split=5,
             random_state=42
         )
