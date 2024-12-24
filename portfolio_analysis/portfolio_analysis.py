@@ -4,11 +4,11 @@ import numpy as np
 
 # read predicted values (output.csv from the other script)
 work_dir = "data"
-pred = pd.read_csv("data/output.csv", parse_dates=["date"])
+pred = pd.read_csv("data/output-data.csv", parse_dates=["date"])
 # pred.columns = map(str.lower, pred.columns)
 
 # select model (ridge as an example)
-model = "ridge"
+model = "en"
 
 # sort stocks into deciles (10 portfolios) each month based on the predicted returns and calculate portfolio returns
 # portfolio 1 is the decile with the lowest predicted returns, portfolio 10 is the decile with the highest predicted returns

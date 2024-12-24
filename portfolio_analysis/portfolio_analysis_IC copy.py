@@ -1,14 +1,13 @@
 import pandas as pd
 import numpy as np
 from scipy.stats import spearmanr
-import matplotlib.pyplot as plt
 
 # 读取预测值
 work_dir = "data"
-pred = pd.read_csv(f"{work_dir}/output-data.csv", parse_dates=["date"])
+pred = pd.read_csv(f"{work_dir}/output.csv", parse_dates=["date"])
 
 # 选择模型（如 Ridge）
-model = "ols"
+model = "ridge"
 
 # 参数：每月选股范围
 min_stocks = 50
@@ -23,12 +22,8 @@ def select_stocks(df, long_top=True, n_min=min_stocks, n_max=max_stocks):
     return selected
 
 # 动态权重分配
-def calculate_weights(df):
-    abs_sum = df[model].abs().sum()
-    if abs_sum > 0:
-        df["weight"] = df[model] / abs_sum
-    else:
-        df["weight"] = 0
+def calculate_equal_weights(df):
+    df["weight"] = 1 / len(df)  # 所有选中的股票的权重相等
     return df
 
 # 投资组合策略计算
@@ -37,12 +32,12 @@ ic_values = []
 for (year, month), group in pred.groupby(["year", "month"]):
     # 长多策略
     long_stocks = select_stocks(group, long_top=True)
-    long_stocks = calculate_weights(long_stocks)
+    long_stocks = calculate_equal_weights(long_stocks)
     long_return = (long_stocks["weight"] * long_stocks["stock_exret"]).sum()
 
     # 短多策略
     short_stocks = select_stocks(group, long_top=False)
-    short_stocks = calculate_weights(short_stocks)
+    short_stocks = calculate_equal_weights(short_stocks)
     short_return = (short_stocks["weight"] * short_stocks["stock_exret"]).sum()
 
     # 多空策略
@@ -88,11 +83,6 @@ max_drawdown = drawdown.max()
 print("Maximum Drawdown:", max_drawdown)
 
 # 保存结果
-results_df.to_csv(f"{work_dir}/strategy_IC.csv", index=False)
+results_df.to_csv(f"{work_dir}/strategy_equal_IC.csv", index=False)
 
-print("Results saved to strategy_IC.csv")
-
-print(results_df["long_short_return"].describe())
-
-results_df["long_short_return"].plot()
-plt.show()
+print("Results saved to strategy_equal_IC.csv")

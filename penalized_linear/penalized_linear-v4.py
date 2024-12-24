@@ -40,6 +40,7 @@ if __name__ == "__main__":
     for var in stock_vars:
         if var in data.columns:
             data[var] = savgol_filter(data[var], window_length=5, polyorder=2)
+    print("Data smoothing completed.")
 
     starting = pd.to_datetime("20000101", format="%Y%m%d")
     counter = 0
@@ -65,20 +66,25 @@ if __name__ == "__main__":
         Y_test = test[ret_var].values
 
         # Feature selection based on importance from Random Forest
+        print("Starting feature selection using Random Forest...")
         rf_feature_selector = RandomForestRegressor(n_estimators=100, random_state=42)
         rf_feature_selector.fit(X_train, Y_train)
         feature_importances = rf_feature_selector.feature_importances_
         important_features = [stock_vars[i] for i in np.argsort(feature_importances)[-20:]]  # Select top 20 features
+        print(f"Selected top 20 features based on Random Forest importance: {important_features}")
 
         X_train = train[important_features].values
         X_val = validate[important_features].values
         X_test = test[important_features].values
+        print("Feature selection completed.")
 
         # PCA for dimensionality reduction
+        print("Performing PCA for dimensionality reduction...")
         pca = PCA(n_components=10)  # Reduce to 10 principal components
         X_train = pca.fit_transform(X_train)
         X_val = pca.transform(X_val)
         X_test = pca.transform(X_test)
+        print(f"PCA completed. Reduced to {pca.n_components_} principal components.")
 
         Y_mean = np.mean(Y_train)
         Y_train_dm = Y_train - Y_mean
@@ -86,14 +92,18 @@ if __name__ == "__main__":
         reg_pred = test[["year", "month", "date", "permno", ret_var]]
 
         # Random Forest with Cross-Validation
+        print("Training Random Forest model with GridSearchCV...")
         rf_params = {"n_estimators": [50, 100, 200], "max_depth": [3, 5, 10]}
         kf = KFold(n_splits=5, shuffle=True, random_state=42)
         rf_grid = GridSearchCV(RandomForestRegressor(random_state=42), rf_params, scoring='neg_mean_squared_error', cv=kf, n_jobs=-1)
         rf_grid.fit(X_train, Y_train_dm)
         best_rf = rf_grid.best_estimator_
         reg_pred["rf"] = best_rf.predict(X_test) + Y_mean
+        rf_r2 = 1 - np.sum(np.square((Y_test - reg_pred["rf"]))) / np.sum(np.square(Y_test))
+        print(f"Random Forest R²: {rf_r2:.4f}")
 
         # Gradient Boosting with Bayesian Optimization
+        print("Training Gradient Boosting model with Bayesian Optimization...")
         gb_params = {
             'n_estimators': (50, 200),
             'learning_rate': (0.01, 0.2, 'log-uniform'),
@@ -103,6 +113,8 @@ if __name__ == "__main__":
         gb_bayes.fit(X_train, Y_train_dm)
         best_gb = gb_bayes.best_estimator_
         reg_pred["gb"] = best_gb.predict(X_test) + Y_mean
+        gb_r2 = 1 - np.sum(np.square((Y_test - reg_pred["gb"]))) / np.sum(np.square(Y_test))
+        print(f"Gradient Boosting R²: {gb_r2:.4f}")
 
         pred_out = pred_out._append(reg_pred, ignore_index=True)
         counter += 1
@@ -110,10 +122,5 @@ if __name__ == "__main__":
     out_path = os.path.join(work_dir, "output-v4.csv")
     pred_out.to_csv(out_path, index=False)
 
-    yreal = pred_out[ret_var].values
-    for model_name in ["ols", "lasso", "ridge", "en", "rf", "gb"]:
-        ypred = pred_out[model_name].values
-        r2 = 1 - np.sum(np.square((yreal - ypred))) / np.sum(np.square(yreal))
-        print(model_name, r2)
-
+    print("Modeling and prediction completed.")
     print(datetime.datetime.now())

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy.stats import spearmanr
+import matplotlib.pyplot as plt
 
 # 读取预测值
 work_dir = "data"
@@ -70,26 +71,74 @@ for (year, month), group in pred.groupby([pred["date"].dt.year, pred["date"].dt.
 results_df = pd.DataFrame(results)
 results_df["IC"] = ic_values
 
-# 计算性能指标
-results_df["cumulative_long"] = (1 + results_df["long_return"].clip(lower=0.01, upper=10)).cumprod() - 1
-results_df["cumulative_short"] = (1 + results_df["short_return"].clip(lower=0.01, upper=10)).cumprod() - 1
-results_df["cumulative_long_short"] = (1 + results_df["long_short_return"].clip(lower=0.01, upper=10)).cumprod() - 1
 
-# Sharpe Ratio
-sharpe_ratio = results_df["long_short_return"].mean() / results_df["long_short_return"].std() * np.sqrt(12)
+# 使用对数收益计算
+results_df["log_long"] = np.log(1 + results_df["long_return"])
+results_df["log_short"] = np.log(1 + results_df["short_return"])
+results_df["log_long_short"] = np.log(1 + results_df["long_short_return"])
+
+# 确保收益值大于 -1
+results_df["log_long_short"] = np.log(1 + results_df["long_short_return"].clip(lower=-0.99))
+
+# 仅对正收益使用对数收益计算
+results_df["log_long_short"] = np.where(
+    results_df["long_short_return"] > -1,
+    np.log(1 + results_df["long_short_return"]),
+    0  # 对于不合法的收益值（小于-1），设为0或其他值
+)
+
+# 累计对数收益
+results_df["cumulative_log_long"] = results_df["log_long"].cumsum()  # 对数收益的累积
+results_df["cumulative_log_short"] = results_df["log_short"].cumsum()
+results_df["cumulative_log_long_short"] = results_df["log_long_short"].cumsum()
+
+# Sharpe Ratio 计算
+log_returns = results_df["log_long_short"]
+std_dev = log_returns.std()  # 计算对数收益的标准差
+mean_return = log_returns.mean()  # 计算对数收益的均值
+
+# 如果标准差太小，可以调整计算方式或剔除异常数据
+if std_dev < 0.01:
+    sharpe_ratio = np.nan  # 如果波动性异常小，则返回NaN
+else:
+    sharpe_ratio = mean_return / std_dev * np.sqrt(12)
+
 print("Sharpe Ratio:", sharpe_ratio)
 
 # Max 1-Month Loss
-max_1m_loss = results_df["long_short_return"].min()
+max_1m_loss = results_df["log_long_short"].min()
 print("Max 1-Month Loss:", max_1m_loss)
 
 # Maximum Drawdown
-rolling_peak = results_df["cumulative_long_short"].cummax()
-drawdown = rolling_peak - results_df["cumulative_long_short"]
-max_drawdown = drawdown.max()
+# 重新计算累计回报
+results_df["cumulative_log_long_short"] = results_df["log_long_short"].cumsum()
+
+# 计算滚动峰值和回撤
+rolling_peak = results_df["cumulative_log_long_short"].cummax()
+drawdowns = rolling_peak - results_df["cumulative_log_long_short"]
+max_drawdown = drawdowns.max()
 print("Maximum Drawdown:", max_drawdown)
 
 # 保存结果
 results_df.to_csv(f"{work_dir}/strategy-RF_IC.csv", index=False)
 
 print("Results saved to strategy-RF_IC.csv")
+
+# 打印统计描述
+print(results_df["log_long_short"].describe())
+
+# 可视化 log 长空策略收益
+plt.figure(figsize=(10, 6))
+plt.plot(results_df["cumulative_log_long_short"], label="Cumulative Log Return (Long-Short)")
+plt.title("Cumulative Log Return of Long-Short Strategy")
+plt.xlabel("Months")
+plt.ylabel("Cumulative Log Return")
+plt.legend()
+plt.show()
+
+# 可视化收益分布
+plt.hist(results_df["log_long_short"], bins=50)
+plt.title("Distribution of Log Returns (Long-Short)")
+plt.xlabel("Log Return")
+plt.ylabel("Frequency")
+plt.show()
