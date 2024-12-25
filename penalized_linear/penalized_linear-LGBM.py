@@ -2,8 +2,6 @@ import datetime
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.feature_selection import SelectKBest, f_regression
-from sklearn.impute import SimpleImputer
 import lightgbm as lgb
 import os
 from sklearn.metrics import mean_squared_error
@@ -27,25 +25,9 @@ stock_vars = pd.read_csv(file_path)["variable"].values.tolist()  # 转换为列�
 ret_var = "stock_exret"
 raw = raw[raw[ret_var].notna()].copy()  # 筛选非空的目标变量数据
 
-# 优化内存使用：调整数据类型
-for col in raw.select_dtypes(include=['float']).columns:
-    raw[col] = raw[col].astype('float32')
-for col in raw.select_dtypes(include=['int']).columns:
-    raw[col] = raw[col].astype('int32')
-
-# 特征选择函数（添加缺失值处理）
-def select_features(X, y, k=50):
-    # 填充缺失值
-    imputer = SimpleImputer(strategy="mean")
-    X = imputer.fit_transform(X)
-    selector = SelectKBest(score_func=f_regression, k=k)
-    X_new = selector.fit_transform(X, y)
-    selected_features = selector.get_support(indices=True)
-    return X_new, selected_features
-
-# 读取处理后的数据
+# 直接使用数据，无需进一步处理
 data = raw.copy()
-data = data.sort_values(by="date")  # 按时间排序，避免每次循环中重复排序
+data = data.sort_values(by="date")  # 按时间排序
 
 if __name__ == "__main__":
     print(datetime.datetime.now())
@@ -75,35 +57,36 @@ if __name__ == "__main__":
         X_test = test[stock_vars].values
         Y_test = test[ret_var].values
 
-        # 特征选择
-        print("开始特征选择...")
-        X_train_selected, selected_features = select_features(X_train, Y_train, k=50)
-        X_val_selected = X_val[:, selected_features]
-        X_test_selected = X_test[:, selected_features]
-        print(f"特征选择完成，共选出 {len(selected_features)} 个特征")
-
-        # LightGBM模型定义
-        lgb_model = lgb.LGBMRegressor(random_state=42)
+        # LightGBM模型定义（不使用 GPU）
+        lgb_model = lgb.LGBMRegressor(
+            random_state=42,
+            verbosity=-1,  # 禁用所有日志输出
+            force_col_wise=True  # 强制使用列方向多线程计算，减少内存开销
+        )
 
         # 超参数网格
         param_grid = {
-            "n_estimators": [50, 100, 200],
-            "max_depth": [5, 10, 15],
-            "learning_rate": [0.01, 0.1, 0.2],
-            "num_leaves": [31, 50, 100],
+            "n_estimators": [100],
+            "max_depth": [5],
+            "learning_rate": [0.01],
+            "num_leaves": [31],
         }
 
         # 使用 GridSearchCV 进行超参数搜索
-        grid_search = GridSearchCV(lgb_model, param_grid, scoring="neg_mean_squared_error", cv=3, n_jobs=-1)
-        grid_search.fit(X_train_selected, Y_train)
+        grid_search = GridSearchCV(lgb_model, param_grid, scoring="neg_mean_squared_error", cv=2, n_jobs=-1)
+        grid_search.fit(X_train, Y_train)
         best_model = grid_search.best_estimator_
 
         print(f"LightGBM最佳模型参数: {grid_search.best_params_}, 验证集MSE: {-grid_search.best_score_}")
 
         # 使用最佳模型预测测试集
-        lgb_test_pred = best_model.predict(X_test_selected)
+        lgb_test_pred = best_model.predict(X_test)
+
+        # 创建预测结果 DataFrame
         temp_df = test[["date", "permno"]].copy()
-        temp_df["LightGBM_pred"] = lgb_test_pred
+        temp_df["LightGBM_pred"] = lgb_test_pred  # 模型的预测值（用于分组逻辑）
+        temp_df["stock_exret_pred"] = lgb_test_pred  # 同样是预测值，具体分析时用
+        temp_df["actual_stock_exret"] = Y_test       # 实际值
 
         # 将结果追加到 pred_out
         pred_out = pd.concat([pred_out, temp_df], ignore_index=True)
@@ -111,7 +94,7 @@ if __name__ == "__main__":
         counter += 1
 
     # 保存结果
-    output_path = os.path.join(work_dir, "output.csv")
+    output_path = os.path.join(work_dir, "output-LGBM-B-cv=2.csv")
     pred_out.to_csv(output_path, index=False)
     print(f"结果已保存至：{output_path}")
 
