@@ -7,7 +7,7 @@ import os
 
 # 设置工作目录和读取预测数据
 work_dir = "data"
-file_path = os.path.join(work_dir, "output_rf_0.csv")  # 替换为实际路径
+file_path = os.path.join(work_dir, "combined_output_rf.csv")  # 替换为实际路径
 data = pd.read_csv(file_path, parse_dates=["date"])
 
 # 确保数据中包含必要的列
