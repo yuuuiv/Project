@@ -16,15 +16,16 @@ for col in required_columns:
     if col not in data.columns:
         raise ValueError(f"缺少必要的列：{col}")
 
-# 计算全局 R²
-def calculate_r_squared(actual, predicted):
+# 修改后的 R^2 计算函数
+def calculate_r_squared_new(actual, predicted):
     ss_residual = np.sum((actual - predicted) ** 2)
-    ss_total = np.sum((actual - np.mean(actual)) ** 2)
+    ss_total = np.sum(actual ** 2)  # 根据提供的公式，不减去均值
     r_squared = 1 - ss_residual / ss_total
     return r_squared
 
-r_squared = calculate_r_squared(data["actual_stock_exret"], data["stock_exret_pred"])
-print(f"Overall R²: {r_squared:.4f}")
+# 使用新的 R^2 公式计算
+r_squared_new = calculate_r_squared_new(data["actual_stock_exret"], data["stock_exret_pred"])
+print(f"Custom R² (based on provided definition): {r_squared_new:.4f}")
 
 # 按年月分组计算 IC 和月度 R²
 data["year"] = data["date"].dt.year
@@ -37,7 +38,7 @@ for (year, month), group in data.groupby(["year", "month"]):
         # IC 计算
         ic, _ = spearmanr(group["stock_exret_pred"], group["actual_stock_exret"])
         # 月度 R² 计算
-        r_squared_month = calculate_r_squared(group["actual_stock_exret"], group["stock_exret_pred"])
+        r_squared_month = calculate_r_squared_new(group["actual_stock_exret"], group["stock_exret_pred"])
     else:
         ic, r_squared_month = np.nan, np.nan  # 样本量不足时
     ic_values.append({"year": year, "month": month, "IC": ic, "R²": r_squared_month})
@@ -152,4 +153,28 @@ plt.title("Portfolio Analysis")
 plt.xlabel("Months")
 plt.ylabel("Cumulative Return")
 plt.legend()
+plt.show()
+
+# 绘制 stock_exret_pred 的曲线
+plt.figure(figsize=(10, 6))
+data_sorted = data.sort_values("date")
+plt.plot(data_sorted["date"], data_sorted["stock_exret_pred"], label="Predicted stock_exret", color="blue", alpha=0.7)
+plt.title("Predicted Stock Excess Return (stock_exret_pred)")
+plt.xlabel("Date")
+plt.ylabel("Predicted Stock Excess Return")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.legend()
+plt.savefig(os.path.join(work_dir, "stock_exret_pred_curve.png"))
+plt.show()
+
+# 绘制 stock_exret_pred 和 actual_stock_exret 对比曲线
+plt.figure(figsize=(10, 6))
+plt.plot(data_sorted["date"], data_sorted["stock_exret_pred"], label="Predicted stock_exret", color="blue", alpha=0.7)
+plt.plot(data_sorted["date"], data_sorted["actual_stock_exret"], label="Actual stock_exret", color="red", alpha=0.7)
+plt.title("Predicted vs Actual Stock Excess Return")
+plt.xlabel("Date")
+plt.ylabel("Stock Excess Return")
+plt.grid(axis="y", linestyle="--", alpha=0.7)
+plt.legend()
+plt.savefig(os.path.join(work_dir, "predicted_vs_actual_curve.png"))
 plt.show()
